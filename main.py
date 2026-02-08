@@ -98,7 +98,6 @@ def greetings(message):
 Я помогу тебе в изучении английского языка
 Чтобы начать занятие напиши /start_class"""
     )
-
     add_user(message)
 
 
@@ -171,7 +170,6 @@ def add_word_user(message):
                             f"Сейчас у вам всего [ {word_count(message) + 10} ] слов для занятий",
                             reply_markup=buttons_when_adding
                         )
-
                         bot.register_next_step_handler(message, reply_after_adding)
                         return
 
@@ -376,7 +374,6 @@ def start_class(message):
         f"Какой будет перевод у слова   ->  {current_word}",
         reply_markup=marcup
     )
-
     bot.register_next_step_handler(message, reply_to_press)
 
 
@@ -392,7 +389,6 @@ def add_word_to_user(message):
         """,
         reply_markup=buttons_when_adding
     )
-
     bot.register_next_step_handler(message, add_word_user)
 
 
@@ -407,7 +403,6 @@ def delete_word_to_user(message):
         """,
         reply_markup=buttons_when_adding
     )
-
     bot.register_next_step_handler(message, delete_word)
 
 
@@ -520,7 +515,6 @@ def reply_after_adding(message):
             choice(incorrect_input),
             reply_markup = buttons_when_adding
         )
-
         bot.register_next_step_handler(message, reply_after_adding)
 
 
