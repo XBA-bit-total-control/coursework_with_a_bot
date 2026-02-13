@@ -104,7 +104,7 @@ def check_for_word(message):
     with Session() as session:
         check = session.query(WordBase.word)
         check = check.filter(and_(WordBase.word == message.text, WordBase.affiliation == message.from_user.id)).all()
-        return check[0][0]
+        return check
 
 
 def word_count(message):
