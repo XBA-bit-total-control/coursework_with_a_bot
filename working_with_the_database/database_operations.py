@@ -1,58 +1,34 @@
-from sqlalchemy import create_engine, func, text, func, and_, or_
+from sqlalchemy import create_engine, text, func, and_
+from working_with_the_database.table_models import *
+from miscellaneous_data.сommon_words import *
+from miscellaneous_data.env_data import *
 from sqlalchemy.orm import sessionmaker
-from dotenv import load_dotenv
-from table_models import *
 import random as rand
 import sqlalchemy
-import os
 
 
+# Назначение DSN
+DSN = f"postgresql://{DB_LOGIN}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
 
-# Назначение общих слов всех пользователей
-common_words = {
-    "bubble": "пузырь",
-    "red": "красный",
-    "he": "он",
-    "silk": "шелк",
-    "giraffe": "жираф",
-    "bread": "хлеб",
-    "pillow": "подушка",
-    "car": "машина",
-    "waffle": "вафля",
-    "cat": "кошка",
-    "lesson": "урок"
-}
-
-# Чтение и запись .env данных
-load_dotenv()
-
-db_login = os.getenv("DB_LOGIN")
-db_password = os.getenv("DB_PASSWORD")
-db_host = os.getenv("DB_HOST")
-db_port = os.getenv("DB_PORT")
-db_name = os.getenv("DB_NAME")
-
-# Непосредственно работа с БД
-DSN = f"postgresql://{db_login}:{db_password}@{db_host}:{db_port}/{db_name}"
-
-# Создание БД
-try:
-    engine_creator = create_engine(f"postgresql://{db_login}:{db_password}@{db_host}:{db_port}")
-    with engine_creator.connect() as connect:
-        connect.execute(text("COMMIT"))
-        connect.execute(text('CREATE DATABASE users_words_db'))
-    print("База данных 'users_words_db' была создана")    # Полу-логирование
-except sqlalchemy.exc.ProgrammingError:
-    print("База данных уже существует - можно работать")    # Полу-логирование
-except Exception as e:
-    raise e("Фатальная ошибка исполнения кода")
 
 # Функция создания сформированных таблиц
 def create_tables(engine):
     Base.metadata.drop_all(engine)
     Base.metadata.create_all(engine)
-    print("Таблицы common_word, users и users_words были созданы и отчищены")    # Полу-логирование
+    print("Таблицы common_word, users и users_words были созданы и отчищены")  # Полу-логирование
 
+
+# Создание БД
+try:
+    engine_creator = create_engine(f"postgresql://{DB_LOGIN}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}")
+    with engine_creator.connect() as connect:
+        connect.execute(text("COMMIT"))
+        connect.execute(text('CREATE DATABASE users_words_db'))
+    print("База данных 'users_words_db' была создана")  # Полу-логирование
+except sqlalchemy.exc.ProgrammingError:
+    print("База данных уже существует - можно работать")  # Полу-логирование
+except Exception as e:
+    raise e("Фатальная ошибка исполнения кода")
 
 # Создание инструментов и движка
 engine = create_engine(DSN)
@@ -107,7 +83,7 @@ def get_translated_word(search):
 
 def get_a_word_on_translation(search):
     """
-    **************
+    Возвращает слово по переданному переводу
     """
     if search in common_words.values():
         for сouple in common_words.items():
@@ -126,8 +102,9 @@ def check_for_word(message):
     Проверка наличия слова у пользователя
     """
     with Session() as session:
-        check = session.query(WordBase.word).filter(and_(WordBase.word == message.text, WordBase.affiliation == message.from_user.id)).all()
-        return check
+        check = session.query(WordBase.word)
+        check = check.filter(and_(WordBase.word == message.text, WordBase.affiliation == message.from_user.id)).all()
+        return check[0][0]
 
 
 def word_count(message):
@@ -135,7 +112,7 @@ def word_count(message):
     Подсчет количества доступных слов у пользователя
     """
     with Session() as session:
-        count =  session.query(func.count(WordBase.word).filter(WordBase.affiliation == message.from_user.id)).all()
+        count = session.query(func.count(WordBase.word).filter(WordBase.affiliation == message.from_user.id)).all()
         return count[0][0]
 
 
@@ -151,7 +128,7 @@ def add_user(message):
             successful_counter=0,
             laziness_counter=0,
             failure_counter=0
-            )
+        )
         )
         session.commit()
 
@@ -164,29 +141,37 @@ def changing_user_settings(
         failure_counter: int = None,
         laziness_counter: int = None
 ):
+    """
+    Изменение переданного параметра у пользователя
+    """
     if added_word is not None:
         with Session() as session:
-            session.query(UsersBase).filter(UsersBase.user_id == message.from_user.id).update({'added_word': added_word})
+            session.query(UsersBase).filter(UsersBase.user_id == message.from_user.id).update(
+                {'added_word': added_word})
             session.commit()
 
     if current_translate is not None:
         with Session() as session:
-            session.query(UsersBase).filter(UsersBase.user_id == message.from_user.id).update({'current_translate': current_translate})
+            session.query(UsersBase).filter(UsersBase.user_id == message.from_user.id).update(
+                {'current_translate': current_translate})
             session.commit()
 
     if successful_counter is not None:
         with Session() as session:
-            session.query(UsersBase).filter(UsersBase.user_id == message.from_user.id).update({'successful_counter': successful_counter})
+            session.query(UsersBase).filter(UsersBase.user_id == message.from_user.id).update(
+                {'successful_counter': successful_counter})
             session.commit()
 
     if failure_counter is not None:
         with Session() as session:
-            session.query(UsersBase).filter(UsersBase.user_id == message.from_user.id).update({'failure_counter': failure_counter})
+            session.query(UsersBase).filter(UsersBase.user_id == message.from_user.id).update(
+                {'failure_counter': failure_counter})
             session.commit()
 
     if laziness_counter is not None:
         with Session() as session:
-            session.query(UsersBase).filter(UsersBase.user_id == message.from_user.id).update({'laziness_counter': laziness_counter})
+            session.query(UsersBase).filter(UsersBase.user_id == message.from_user.id).update(
+                {'laziness_counter': laziness_counter})
             session.commit()
 
     return
@@ -200,6 +185,9 @@ def validate_user_settings(
         failure_counter=None,
         laziness_counter=None
 ):
+    """
+    Выборка нужно параметра у пользователя
+    """
     if added_word is not None:
         with Session() as session:
             word_added = session.query(UsersBase.added_word).filter(UsersBase.user_id == message.from_user.id).first()
@@ -207,12 +195,14 @@ def validate_user_settings(
 
     if current_translate is not None:
         with Session() as session:
-            translate_corrent = session.query(UsersBase.current_translate).filter(UsersBase.user_id == message.from_user.id).first()
+            translate_corrent = session.query(UsersBase.current_translate).filter(
+                UsersBase.user_id == message.from_user.id).first()
             return translate_corrent[0]
 
     if successful_counter is not None:
         with Session() as session:
-            result = session.query(UsersBase.successful_counter).filter(UsersBase.user_id == message.from_user.id).first()
+            result = session.query(UsersBase.successful_counter).filter(
+                UsersBase.user_id == message.from_user.id).first()
             return result[0]
 
     if failure_counter is not None:

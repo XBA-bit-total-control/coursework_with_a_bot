@@ -1,11 +1,12 @@
 from sqlalchemy.orm import declarative_base, Mapped, mapped_column
-from sqlalchemy import String, Integer, BigInteger, ForeignKey, ARRAY
-
+from sqlalchemy import String, Integer, BigInteger, ForeignKey
 
 
 # Назначение класса для наследования
 Base = declarative_base()
 
+
+# Создания класса-таблицы общих слов
 class CommonWordsBase(Base):
     __tablename__ = 'common_words'
 
@@ -15,7 +16,8 @@ class CommonWordsBase(Base):
     def __repr__(self):
         return f"{self.word}"
 
-# Создания класса-таблицы слов
+
+# Создания класса-таблицы слов пользователей
 class WordBase(Base):
     __tablename__ = 'words'
 
