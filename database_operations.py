@@ -2,6 +2,7 @@ from sqlalchemy import create_engine, func, text, func, and_, or_
 from sqlalchemy.orm import sessionmaker
 from dotenv import load_dotenv
 from table_models import *
+import random as rand
 import sqlalchemy
 import os
 
@@ -62,10 +63,8 @@ Session = sessionmaker(bind=engine)
 
 # Добавление общих слов
 with Session() as session:
-    session.add(UsersBase(user_id=100))
-    session.commit()
-    for translated, word in common_words.items():
-        session.add(WordBase(word=word, translated=translated, affiliation=100))
+    for word, translated in common_words.items():
+        session.add(CommonWordsBase(word=word, translated=translated))
     session.commit()
 
 
@@ -75,10 +74,10 @@ def get_random_translation(user_id):
     Если у пользователя есть добавленные слова, то может вернуть перевод из них
     """
     with Session() as session:
-        word_from_func = session.query(WordBase.translated).filter(
-            or_(WordBase.affiliation == 100, WordBase.affiliation == user_id)).order_by(
-            func.random()).limit(1).first()
-        return word_from_func[0]
+        translated_common = session.query(CommonWordsBase.translated).all()
+        translated_user = session.query(WordBase.translated).filter(WordBase.affiliation == user_id).all()
+        all_translated = translated_user + translated_common
+        return rand.choice(all_translated)[0]
 
 
 def get_random_word(user_id):
@@ -87,27 +86,47 @@ def get_random_word(user_id):
     Если у пользователя есть добавленные слова, то может вернуть слово из них
     """
     with Session() as session:
-        word_from_func = session.query(WordBase.word).filter(
-            or_(WordBase.affiliation == 100, WordBase.affiliation == user_id)).order_by(
-            func.random()).limit(1).first()
-        return word_from_func[0]
+        words_common = session.query(CommonWordsBase.word).all()
+        words_user = session.query(WordBase.word).filter(WordBase.affiliation == user_id).all()
+        all_words = words_user + words_common
+        return rand.choice(all_words)[0]
 
 
 def get_translated_word(search):
     """
     Получение перевода для слова
     """
-    with Session() as session:
-        translated_from_func = session.query(WordBase.word).filter(WordBase.translated == search).first()
-        return translated_from_func[0]
+    if search in common_words.keys():
+        return common_words.get(search)
+    else:
+        with Session() as session:
+            query = session.query(WordBase.translated)
+            query = query.filter(WordBase.word == search).first()
+            return query[0]
+
+
+def get_a_word_on_translation(search):
+    """
+    **************
+    """
+    if search in common_words.values():
+        for сouple in common_words.items():
+            if search in сouple:
+                return search[0]
+
+    else:
+        with Session() as session:
+            query = session.query(WordBase.word)
+            query = query.filter(WordBase.translated == search).first()
+            return query[0]
 
 
 def check_for_word(message):
     """
-    Проверка наличия слова как у пользователя, так и общего
+    Проверка наличия слова у пользователя
     """
     with Session() as session:
-        check = session.query(WordBase.word).filter(and_(WordBase.translated == message.text, WordBase.affiliation == message.from_user.id)).all()
+        check = session.query(WordBase.word).filter(and_(WordBase.word == message.text, WordBase.affiliation == message.from_user.id)).all()
         return check
 
 
@@ -125,9 +144,85 @@ def add_user(message):
     Добавление пользователя при начале взаимодействия
     """
     with Session() as session:
-        try:
-            session.add(UsersBase(user_id=message.from_user.id))
+        session.add(UsersBase(
+            user_id=message.from_user.id,
+            current_translate='',
+            added_word='',
+            successful_counter=0,
+            laziness_counter=0,
+            failure_counter=0
+            )
+        )
+        session.commit()
+
+
+def changing_user_settings(
+        message,
+        added_word: str = None,
+        current_translate: str = None,
+        successful_counter: int = None,
+        failure_counter: int = None,
+        laziness_counter: int = None
+):
+    if added_word is not None:
+        with Session() as session:
+            session.query(UsersBase).filter(UsersBase.user_id == message.from_user.id).update({'added_word': added_word})
             session.commit()
-            return
-        except sqlalchemy.exc.IntegrityError:
-            session.rollback()
+
+    if current_translate is not None:
+        with Session() as session:
+            session.query(UsersBase).filter(UsersBase.user_id == message.from_user.id).update({'current_translate': current_translate})
+            session.commit()
+
+    if successful_counter is not None:
+        with Session() as session:
+            session.query(UsersBase).filter(UsersBase.user_id == message.from_user.id).update({'successful_counter': successful_counter})
+            session.commit()
+
+    if failure_counter is not None:
+        with Session() as session:
+            session.query(UsersBase).filter(UsersBase.user_id == message.from_user.id).update({'failure_counter': failure_counter})
+            session.commit()
+
+    if laziness_counter is not None:
+        with Session() as session:
+            session.query(UsersBase).filter(UsersBase.user_id == message.from_user.id).update({'laziness_counter': laziness_counter})
+            session.commit()
+
+    return
+
+
+def validate_user_settings(
+        message,
+        added_word=None,
+        current_translate=None,
+        successful_counter=None,
+        failure_counter=None,
+        laziness_counter=None
+):
+    if added_word is not None:
+        with Session() as session:
+            word_added = session.query(UsersBase.added_word).filter(UsersBase.user_id == message.from_user.id).first()
+            return word_added[0]
+
+    if current_translate is not None:
+        with Session() as session:
+            translate_corrent = session.query(UsersBase.current_translate).filter(UsersBase.user_id == message.from_user.id).first()
+            return translate_corrent[0]
+
+    if successful_counter is not None:
+        with Session() as session:
+            result = session.query(UsersBase.successful_counter).filter(UsersBase.user_id == message.from_user.id).first()
+            return result[0]
+
+    if failure_counter is not None:
+        with Session() as session:
+            result = session.query(UsersBase.failure_counter).filter(UsersBase.user_id == message.from_user.id).first()
+            return result[0]
+
+    if laziness_counter is not None:
+        with Session() as session:
+            result = session.query(UsersBase.laziness_counter).filter(UsersBase.user_id == message.from_user.id).first()
+            return result[0]
+
+    return

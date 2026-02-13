@@ -13,17 +13,8 @@ import os
 load_dotenv()
 TOKEN = os.getenv("TOKEN")
 
+# "Создаём" бота
 bot = telebot.TeleBot(TOKEN)
-
-# Назначение общих переменных
-marcup = ''
-added_word = ''
-current_translate = ''
-
-# Назначение счётчиков
-failure_counter = 0
-laziness_counter = 0
-successful_counter = 0
 
 # Успешные ответы для пользователя
 successful_responses = [
@@ -92,13 +83,87 @@ buttons_when_adding.row(
 # Обработчик запуска бота
 @bot.message_handler(commands=['start', "старт"])
 def greetings(message):
-    bot.send_message(
-        message.chat.id,
-        f"""Здравствуй {message.from_user.first_name} {message.from_user.last_name}!
+    try:
+        add_user(message)
+        if message.from_user.last_name is None:
+            bot.send_message(
+                message.chat.id,
+                f"""Здравствуй {message.from_user.first_name}!
 Я помогу тебе в изучении английского языка
 Чтобы начать занятие напиши /start_class"""
-    )
-    add_user(message)
+            )
+        else:
+            bot.send_message(
+                message.chat.id,
+                f"""Здравствуй {message.from_user.first_name} {message.from_user.last_name}!
+Я помогу тебе в изучении английского языка
+Чтобы начать занятие напиши /start_class"""
+            )
+    except sqlalchemy.exc.IntegrityError:
+        bot.send_message(
+            message.chat.id,
+            "Вы уже можете начать заниматься"
+        )
+
+
+def random_buttons(message, repeat=False):
+
+    def random_word_sheet():
+        while len(current_translations) < 4:
+            word = get_random_translation(message.from_user.id)
+            if word not in current_translations:
+                current_translations.append(word)
+
+    # Получаем случайный перевод
+    if repeat:
+        current_translate = validate_user_settings(message, current_translate=True)
+        random_word = get_a_word_on_translation(current_translate)
+
+        current_translations = [current_translate]
+
+        random_word_sheet()
+
+    else:
+        random_word = get_random_word(message.from_user.id)
+        random_transfer = get_translated_word(random_word)
+
+        current_translate = validate_user_settings(message, current_translate=True)
+
+        # Подбираем слово, которое не использовалось в прошлый раз
+        while random_transfer == current_translate:
+            random_word = get_random_word(message.from_user.id)
+            random_transfer = get_translated_word(random_word)
+        else:
+            changing_user_settings(message, current_translate=random_transfer)
+
+        current_translations = [random_transfer]
+
+        random_word_sheet()
+
+    # Путаем порядок слов
+    shuffle(current_translations)
+
+    # Назначаем кнопки
+    marcup = types.ReplyKeyboardMarkup()
+
+    # Кнопки вариантов ответов
+    button_1_row_1 = types.KeyboardButton(current_translations[0])
+    button_2_row_1 = types.KeyboardButton(current_translations[1])
+    button_3_row_2 = types.KeyboardButton(current_translations[2])
+    button_4_row_2 = types.KeyboardButton(current_translations[3])
+
+    # Постоянные кнопки управления
+    button_5_row_3 = types.KeyboardButton("Пропустить ❌️")
+    button_6_row_3 = types.KeyboardButton("Добавить слово ➕")
+    button_7_row_4 = types.KeyboardButton("Удалить слово 🗑️")
+
+    # Распределение кнопок по строкам
+    marcup.row(button_1_row_1, button_2_row_1)
+    marcup.row(button_3_row_2, button_4_row_2)
+    marcup.row(button_5_row_3, button_6_row_3)
+    marcup.row(button_7_row_4)
+
+    return [random_word, marcup]
 
 
 def add_word_user(message):
@@ -139,7 +204,6 @@ def add_word_user(message):
     else:
         try:
             # Махинации над проверкой и редактированием поступивших слов
-            global added_word
             sms = message.text.lower()
 
             for let in sms:
@@ -156,11 +220,11 @@ def add_word_user(message):
             if len(sms) == 2:
                 if sms[0] != "" and sms[1] != "":
                     with Session() as session:
-                        added_word = sms[0]
+                        changing_user_settings(message, added_word=sms[0])
                         session.add(WordBase(
                             affiliation=message.from_user.id,
-                            word=sms[1],
-                            translated=sms[0])
+                            word=sms[0],
+                            translated=sms[1])
                         )
                         session.commit()
 
@@ -229,25 +293,23 @@ def delete_word(message):
     """
     Удаляет слово из базы данных для обращающегося пользователя
     """
-    global added_word
 
     def d_w(removable):
         """
         Подфункция для сокращения кода
         """
-        global added_word
 
-        with engine.connect() as connect:
-            connect.execute(text(f"DELETE FROM words WHERE translated = '{removable}' AND affiliation = {message.from_user.id}"))
-            connect.execute(text("COMMIT"))
+        with Session() as session:
+            session.query(WordBase).filter(WordBase.word == removable).delete()
+            session.commit()
 
-        if removable == added_word:
+        if removable == validate_user_settings(message, added_word=True):
             bot.send_message(
                 message.chat.id,
                 "Прошлое добавленное вами слово удаленно",
                 reply_markup=buttons_when_adding
             )
-            added_word = ''
+            changing_user_settings(message, added_word='')
 
         else:
             bot.send_message(
@@ -256,7 +318,6 @@ def delete_word(message):
                 reply_markup=buttons_when_adding
             )
 
-        bot.register_next_step_handler(message, reply_after_adding)
         return
 
     # Проверка поступивших данных
@@ -297,6 +358,7 @@ def delete_word(message):
         return
 
     elif message.text == "Отменить добавление прошлого слова 🔙":
+        added_word = validate_user_settings(message, added_word=True)
         if added_word == '':
             bot.send_message(
                 message.chat.id,
@@ -327,52 +389,13 @@ def start_class(message):
     """
     Функция для запуска занятия
     """
-    global current_translate, marcup
 
-    # Получаем случайный перевод
-    current_word = get_random_translation(message.from_user.id)
-
-    # Подбираем слово, которое не использовалось в прошлый раз
-    while current_translate == get_translated_word(current_word):
-        current_word = get_random_translation(message.from_user.id)
-    else:
-        current_translate = get_translated_word(current_word)
-
-    current_translations = [current_translate]
-
-    # Подбираем случайные слова для вариантов ответа
-    while len(current_translations) < 4:
-        word = get_random_word(message.from_user.id)
-        if word not in current_translations:
-            current_translations.append(word)
-
-    # Путаем порядок слов
-    shuffle(current_translations)
-
-    # Назначаем кнопки
-    marcup = types.ReplyKeyboardMarkup()
-
-    # Кнопки вариантов ответов
-    button_1_row_1 = types.KeyboardButton(current_translations[0])
-    button_2_row_1 = types.KeyboardButton(current_translations[1])
-    button_3_row_2 = types.KeyboardButton(current_translations[2])
-    button_4_row_2 = types.KeyboardButton(current_translations[3])
-
-    # Постоянные кнопки управления
-    button_5_row_3 = types.KeyboardButton("Пропустить ❌️")
-    button_6_row_3 = types.KeyboardButton("Добавить слово ➕")
-    button_7_row_4 = types.KeyboardButton("Удалить слово 🗑️")
-
-    # Распределение кнопок по строкам
-    marcup.row(button_1_row_1, button_2_row_1)
-    marcup.row(button_3_row_2, button_4_row_2)
-    marcup.row(button_5_row_3, button_6_row_3)
-    marcup.row(button_7_row_4)
+    buttons = random_buttons(message)
 
     bot.send_message(
         message.chat.id,
-        f"Какой будет перевод у слова   ->  {current_word}",
-        reply_markup=marcup
+        f"Какой будет перевод у слова   ->  {buttons[0]}",
+        reply_markup=buttons[1]
     )
     bot.register_next_step_handler(message, reply_to_press)
 
@@ -410,19 +433,29 @@ def reply_to_press(message):
     """
     Обработчик ответа пользователя на занятии
     """
-    global successful_counter, failure_counter, laziness_counter
+    successful_counter = validate_user_settings(message, successful_counter=True)
+    failure_counter = validate_user_settings(message, failure_counter=True)
+    laziness_counter = validate_user_settings(message, laziness_counter=True)
 
     # Успешный ответ
-    if message.text == current_translate:
+    if message.text == validate_user_settings(message, current_translate=True):
         if successful_counter == 5:     # Поощрение за 5 правильных ответов подряд
             bot.send_message(message.chat.id, choice(praise))
-            successful_counter = 0
-            laziness_counter = 0
+            changing_user_settings(
+                message,
+                successful_counter=0,
+                failure_counter=0,
+                laziness_counter=0
+            )
             start_class(message)
         else:
             bot.send_message(message.chat.id, choice(successful_responses))
-            successful_counter += 1
-            laziness_counter = 0
+            changing_user_settings(
+                message,
+                successful_counter=successful_counter + 1,
+                failure_counter=0,
+                laziness_counter=0
+            )
             start_class(message)
 
     # Активация пропуска слова
@@ -438,9 +471,10 @@ def reply_to_press(message):
                 message.chat.id,
                 'Хорошо - пропускаем слово'
             )
-            laziness_counter +=1
-            successful_counter = 0
-            failure_counter = 0
+            changing_user_settings(
+                message,
+                laziness_counter=laziness_counter + 1,
+            )
             start_class(message)
 
     # Активация добавления слова
@@ -456,7 +490,7 @@ def reply_to_press(message):
         bot.send_message(
             message.chat.id,
             'Занятие уже идет',
-            reply_markup = marcup
+            reply_markup = random_buttons(message, repeat=True)[1]
         )
         bot.register_next_step_handler(message, reply_to_press)
 
@@ -468,16 +502,24 @@ def reply_to_press(message):
     else:
         if failure_counter == 3:
             bot.send_message(message.chat.id, choice(dead_end))
-            failure_counter = 0
-            successful_counter = 0
+            changing_user_settings(
+                message,
+                successful_counter=0,
+                failure_counter=0,
+                laziness_counter=0
+            )
             start_class(message)    # Автоматический пропуск слова при частых ошибках
         else:
             bot.send_message(
                 message.chat.id,
                 choice(unsuccessful_answers),
-                reply_markup = marcup
+                reply_markup = random_buttons(message, repeat=True)[1]
             )
-            failure_counter += 1
+            changing_user_settings(
+                message,
+                successful_counter=0,
+                failure_counter=failure_counter + 1
+            )
             bot.register_next_step_handler(message, reply_to_press)
 
 
@@ -492,7 +534,7 @@ def reply_after_adding(message):
         delete_word_to_user(message)
 
     elif message.text == "Отменить добавление прошлого слова 🔙":
-        if added_word == '':
+        if validate_user_settings(message, added_word=True) == '':
             bot.send_message(
                 message.chat.id,
                 "Сейчас отменять вам и нечего",
@@ -501,6 +543,8 @@ def reply_after_adding(message):
             bot.register_next_step_handler(message, reply_after_adding)
         else:
             delete_word(message)
+            bot.register_next_step_handler(message, reply_after_adding)
+
 
     elif message.text == "Продолжить занятие ✅":
         start_class(message)
@@ -537,8 +581,10 @@ def admin(message):
 # Обработка команд после /start
 @bot.message_handler(commands=['start_class', 'начать_занятие'])
 def start_class_com(message):
-    start_class(message)
-
+    try:
+        start_class(message)
+    except TypeError:
+        greetings(message)
 
 @bot.message_handler(commands=['admin'])
 def become_an_admin(message):
