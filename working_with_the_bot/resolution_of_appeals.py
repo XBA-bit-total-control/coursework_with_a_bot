@@ -278,9 +278,10 @@ def delete_word(message):
                 reply_markup=buttons_when_editing
             )
             bot.register_next_step_handler(message, reply_after_adding)
+            return
         else:
             d_w(added_word)
-        return
+            return
 
     elif check_for_word(message) == []:
         bot.send_message(
