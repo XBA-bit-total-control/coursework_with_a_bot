@@ -171,7 +171,8 @@ def add_word_user(message):
         except IndexError:
             bot.send_message(
                 message.chat.id,
-                f"Слово не получилось добавить из-за того что вы ввели его не в том формате",
+                """Слово не получилось добавить из-за того что вы ввели его не в том формате
+Повторите попытку корректно""",
                 reply_markup=buttons_when_editing
             )
             bot.register_next_step_handler(message, reply_after_adding)
@@ -179,7 +180,8 @@ def add_word_user(message):
         except AttributeError:
             bot.send_message(
                 message.chat.id,
-                f"Слово не получилось добавить из-за того что был передан не верный тип сообщения",
+                """Слово не получилось добавить из-за того что был передан не верный тип сообщения
+Повторите попытку корректно""",
                 reply_markup=buttons_when_editing
             )
             bot.register_next_step_handler(message, reply_after_adding)
@@ -195,7 +197,8 @@ def add_word_user(message):
         except Exception as error:
             bot.send_message(
                 message.chat.id,
-                f"Слово не получилось добавить из-за ошибки {error}",
+                f"""Слово не получилось добавить из-за ошибки {error}
+Повторите попытку корректно""",
                 reply_markup=buttons_when_editing
             )
             bot.register_next_step_handler(message, reply_after_adding)
