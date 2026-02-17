@@ -187,7 +187,7 @@ def add_word_user(message):
         except sqlalchemy.exc.IntegrityError:
             bot.send_message(
                 message.chat.id,
-                f"Слово '{sms[0]}' уже есть в изучаемых по умолчанию",
+                f"Слово '{sms[0]}' уже есть в у вас в изучаемых",
                 reply_markup=buttons_when_editing
             )
             bot.register_next_step_handler(message, reply_after_adding)
