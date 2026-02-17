@@ -78,6 +78,8 @@ def get_translated_word(search):
         with Session() as session:
             query = session.query(WordBase.translated)
             query = query.filter(WordBase.word == search).first()
+            if query is None:
+                raise TypeError("Ошибка искомого перевода - search(word) не найден ни в одной таблице")
             return query[0]
 
 
