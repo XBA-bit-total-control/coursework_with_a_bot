@@ -88,7 +88,7 @@ def get_a_word_on_translation(search):
     if search in common_words.values():
         for сouple in common_words.items():
             if search in сouple:
-                return search[0]
+                return сouple[0]
 
     else:
         with Session() as session:
