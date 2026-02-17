@@ -114,8 +114,8 @@ def word_count(message):
     Подсчет количества доступных слов у пользователя
     """
     with Session() as session:
-        count = session.query(func.count(WordBase.word).filter(WordBase.affiliation == message.from_user.id)).all()
-        return count[0][0]
+        count = session.query(func.count(WordBase.word).filter(WordBase.affiliation == message.from_user.id)).scalar()
+        return count
 
 
 def add_user(message):
